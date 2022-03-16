@@ -1,0 +1,32 @@
+{
+    "id": "mule",
+    "cmd": null,
+    "cpus": 1,
+    "mem": 2048,
+    "disk": 0,
+    "instances": 1,
+    "container": {
+        "docker": {
+            "image": "tjmai/mule-base:4.2.2",
+            "network": "HOST"
+        },
+        "type": "DOCKER"
+    },
+    "args": [
+        "username",
+        "password",
+        "orgName",
+        "envName",
+        "serverName"
+    ],
+    "healthChecks": [
+        {
+            "protocol": "TCP",
+            "port": 8081,
+            "gracePeriodSeconds": 300,
+            "intervalSeconds": 60,
+            "timeoutSeconds": 20,
+            "maxConsecutiveFailures": 3
+        }
+    ]
+}
