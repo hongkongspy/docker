@@ -1,82 +1,54 @@
-###############################################################################
-## Dockerizing Mule EE
-## Version:  1.0
-## Based on:  java:8-jre (Trusted Java from http://java.com)
-###############################################################################
+FROM         centos:latest
+LABEL maintainer="Mario Cairone <mario.cairone@gmail.com>"
 
-FROM                    java:8-jre
-MAINTAINER              TJ Mai <tung.mai@mulesoft.com>
-ENV                     DEBIAN_FRONTEND noninteractive
+# Define docker build ARGS
+ARG JAVA_BINARIES=https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/jdk8u265-b01/OpenJDK8U-jdk_x64_linux_hotspot_8u265b01.tar.gz
+ARG RUNTIME_VERSION=4.3.0
 
-###############################################################################
-## Setting up the arguments
-ARG     muleVersion=4.2.2
-ARG     muleDistribution=mule-ee-distribution-standalone-$muleVersion.tar.gz
-ARG     muleHome=/opt/mule-enterprise-standalone-$muleVersion
+# Define environment variables
+ENV 	JAVA_BINARIES $JAVA_BINARIES
+ENV 	TMP_DIR /tmp/
+ENV 	JAVA_HOME /opt/jdk
+ENV 	PATH $JAVA_HOME/bin:${PATH}
+ENV 	MULE_ARGS "${MULE_ARGS:-start}"
+ENV     RUNTIME_VERSION $RUNTIME_VERSION
+ENV     MULE_HOME /opt/mule
 
-###############################################################################
-## Base container configurations
-RUN     echo "deb [check-valid-until=no] http://cdn-fastly.deb.debian.org/debian jessie main" > /etc/apt/sources.list.d/jessie.list
-RUN     echo "deb [check-valid-until=no] http://archive.debian.org/debian jessie-backports main" > /etc/apt/sources.list.d/jessie-backports.list
-RUN     sed -i '/deb http:\/\/deb.debian.org\/debian jessie-updates main/d' /etc/apt/sources.list
-RUN     apt-get -o Acquire::Check-Valid-Until=false update
-RUN     echo "Acquire::Check-Valid-Until false;" | tee -a /etc/apt/apt.conf.d/10-nocheckvalid
+WORKDIR     /opt
 
-# Install base pre-requisites
-RUN     apt-get update
-RUN     apt-get upgrade -yq
-RUN     apt-get install -yq apt-utils && apt-get install -yq curl && apt-get install -yq jq
+# Install necessary tools
+RUN	curl -L ${JAVA_BINARIES} -o jdk.tar.gz && \
+	mkdir jdk && \
+	tar xf jdk.tar.gz -C jdk --strip-components 1 && \
+	rm -rf jdk.tar.gz && \
+	curl -L http://s3.amazonaws.com/new-mule-artifacts/mule-ee-distribution-standalone-${RUNTIME_VERSION}.tar.gz -O && \
+	tar xvf mule-ee-distribution-standalone-${RUNTIME_VERSION}.tar.gz && \
+	rm -rf mule-ee-distribution-standalone-${RUNTIME_VERSION}.tar.gz && \
+	ln -s /opt/mule-enterprise-standalone-${RUNTIME_VERSION} mule  && \
+	adduser mule && \
+	chown -R mule:mule /opt/mule-enterprise-standalone-${RUNTIME_VERSION} 
+	
+# Define mount points
+	
+VOLUME ["/opt/mule/logs", "/opt/mule/conf", "/opt/mule/apps", "/opt/mule/domains","/opt/mule/libs"]
 
-###############################################################################
-## MuleEE installation:
+# HTTP Service Port
+# Expose the necessary port ranges as required by the Mule Apps
+EXPOSE      8081-8082
 
-## Install Mule EE
-WORKDIR /opt/
-COPY    ./$muleDistribution /opt/
-#RUN     echo "7dc3bae84bf8b7b1de929c739514f9f9 /opt/$muleDistribution" | md5sum -c
-RUN     tar -xzvf /opt/$muleDistribution
-RUN     ls
-RUN     ln -s $muleHome/ mule
-RUN     ls -l mule
-RUN     rm -f $muleDistribution
+EXPOSE      8091-8092
 
-## Copy the License file - pre-package into docker image to avoid leakage
-# ADD     ./mule-ee-license.lic /opt/mule/conf/
-# RUN     /opt/mule/bin/mule -installLicense /opt/mule/conf/mule-ee-license.lic
-# RUN     rm -f /opt/mule/conf/mule-ee-license.lic
+# Mule remote debugger
+EXPOSE      5000
 
-## Copy the mule start/stop script
-ADD     ./startMule.sh /opt/mule/bin/
-RUN     chmod 755 /opt/mule/bin/startMule.sh
+# Mule agent 
+EXPOSE      7777
 
-###############################################################################
-## Configure mule runtime access pre-requisites
+# Mule JMX port (must match Mule config file)
+EXPOSE      1098
 
-## HTTPS Port for Anypoint Platform communication
-EXPOSE  443
+# Start Mule runtime
+USER mule
 
-## Mule remote debugger
-#EXPOSE  5000
-
-## Mule JMX port (must match Mule config file)
-EXPOSE  1098
-
-## Mule Cluster ports
-EXPOSE 5701
-EXPOSE 54327
-
-###############################################################################
-## Expose the necessary port ranges as required by the apps to be deployed
-
-## HTTP Service Port
-EXPOSE 8081
-
-## HTTPS Service Port
-EXPOSE 8082
-
-###############################################################################
-
-## Environment and execution:
-ENV             MULE_BASE /opt/mule
-WORKDIR         /opt/mule/bin
-ENTRYPOINT      ["/opt/mule/bin/startMule.sh"]
+CMD [ "/opt/mule/bin/mule", "$MULE_ARGS" ]
+	
